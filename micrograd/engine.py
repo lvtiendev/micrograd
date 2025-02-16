@@ -22,6 +22,7 @@ class Value:
             self.grad += output.grad
             other.grad += output.grad
         output._backward = _backward
+        return output
 
     def __mul__(self, other):
         other = other if isinstance(other, Value) else Value(other)
@@ -30,6 +31,15 @@ class Value:
             self.grad += output.grad * other.data
             other.grad += output.grad * self.data
         output._backward = _backward
+        return output
+
+    def __pow__(self, other):
+        assert isinstance(other, (int, float)), "only supporting int/float as powers"
+        output = Value(self.data**other, (self,), f'**{other}')
+        def _backward():
+            self.grad += output.grad * other * self.data**(other-1)
+        output._backward = _backward
+        return output
 
     def __neg__(self): # -self
         return self * -1.0
@@ -47,13 +57,20 @@ class Value:
         return self * other
 
     def __truediv__(self, other): # self / other
-        return other * other**-1
+        return self * other**-1
 
-    def __rtruediff__(self, other): # other / self
+    def __rtruediv__(self, other): # other / self
         return other * self**-1
 
     def __repr__(self):
         return f"Value(data={self.data}, grad={self.grad})"
+
+    def relu(self):
+        output = Value(0 if self.data < 0 else self.data, (self,), 'ReLU')
+        def _backward():
+            self.grad += (output.data > 0) * output.grad
+        output._backward = _backward
+        return output
 
     def backward(self):
         # first, we topological sort all children in the graph
@@ -71,6 +88,7 @@ class Value:
                     visit(c)
                 # after visit all children, append the node
                 topo.append(v)
+        visit(self)
 
         # gradient to self is always 1
         self.grad = 1.0
